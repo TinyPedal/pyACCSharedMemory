@@ -1,0 +1,92 @@
+"""
+Test & read data from ACC's Broadcasting Network Protocol (UDP)
+"""
+
+import logging
+import sys
+from time import perf_counter, sleep
+
+sys.path.append(__file__.split("pyACCSharedMemory")[0])
+from pyACCSharedMemory import acc_enum, acc_udp
+
+
+def test_udp():
+    # Add logger
+    logger = logging.getLogger(__name__)
+    test_handler = logging.StreamHandler()
+    logger.setLevel(logging.INFO)
+    logger.addHandler(test_handler)
+    logger.info(__doc__)
+
+    udp_host = "127.0.0.1"
+    udp_port = 9000
+    server_address = (udp_host, udp_port)
+    update_interval = 0.25
+
+    dataset = acc_udp.UDPBroadcastOutput()
+    print("Host/Port:", udp_host, udp_port)
+    print("Update interval:", update_interval)
+    print("Output data structure size:", acc_udp.UDPBroadcastOutput.size())
+
+    # Set connection message
+    connection_message = acc_udp.set_register_message(
+        display_name="tester",
+        connection_password="",
+        realtime_update_interval=update_interval * 1000,
+        command_password="read-only",
+    )
+
+    with acc_udp.acc_udp_connect(
+        udp_host="127.0.0.1",
+        udp_port=9000,
+        udp_output=dataset,
+        connection_message=connection_message,
+        connection_timeout=1,
+    ) as sock:
+        connection_id = dataset.registration.connectionId
+        # Enable entry list sync
+        dataset.entryList.syncEntryList = True
+        # Request track data, 11=outbound_type.REQUEST_TRACK_DATA
+        message = acc_udp.set_message(11, connection_id)
+        sock.sendto(message, server_address)
+        # Set entry list message, 10=outbound_type.REQUEST_ENTRY_LIST
+        sync_entry_message = acc_udp.set_message(acc_udp.OutboundMessageTypes.REQUEST_ENTRY_LIST, connection_id)
+        # Start update loop
+        last_car_entry_count = 0
+        buffer_size = acc_udp.BroadcastingNetworkProtocol.BUFFER_SIZE
+
+        max_updates = 20
+        while max_updates > 0:
+            # Sync entry list
+            if dataset.entryList.syncEntryList:
+                sock.sendto(sync_entry_message, server_address)
+                dataset.entryList.syncEntryList = False
+                dataset.entryList.lastEntrylistRequest = perf_counter()
+            # Parse response data
+            message_type = acc_udp.parse_udp_stream(sock.recvfrom(buffer_size)[0], dataset)
+            # Update for number of loops equal to carEntryCount, then wait for update_interval
+            car_entry_count = dataset.entryList.carEntryCount
+            if last_car_entry_count != car_entry_count:
+                last_car_entry_count = car_entry_count
+                print("Updated entry list:", car_entry_count)
+            # Wait interval after 2=InboundMessageTypes.REALTIME_UPDATE
+            if message_type == 2:
+                sleep(update_interval)
+            max_updates -= 1
+
+        # Print data
+        print("track name:", dataset.trackData.trackName.decode())
+        print("track length:", dataset.trackData.trackMeters)
+        for i in range(car_entry_count):
+            car_type = dataset.entryList.entryListCars[i].carModelType
+            car_model = acc_enum.ACC_CAR_MODEL_ID(car_type)
+            print(
+                "class:", acc_enum.ACC_CAR_CLASS(car_model),
+                "model:", acc_enum.ACC_CAR_MODEL(car_model),
+            )
+
+
+if __name__ == "__main__":
+    test_udp()
+    # Manually disconnect client
+    #acc_udp.acc_udp_disconnect("127.0.0.1", 9000, list(range(100)))

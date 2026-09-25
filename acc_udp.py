@@ -53,7 +53,6 @@ class BroadcastingNetworkProtocol:
     BROADCASTING_PROTOCOL_VERSION = 4
     BUFFER_SIZE = 4096  # 2 ** 14
     MAX_MAPPED_VEHICLES: int = 60
-    MAX_LINE_UP: int = 10
 
 
 # UDP API data
@@ -153,7 +152,7 @@ class UDPCarInfo(ctypes.Structure):
     currentDriverInfo: UDPDriverInfo = _t(UDPDriverInfo)
     driverCount: int = _t(ctypes.c_byte)
     #drivers: list of driver info from this car (team)
-    #drivers: list[UDPDriverInfo] = _t(UDPDriverInfo * BroadcastingNetworkProtocol.MAX_LINE_UP)
+    #drivers: list[UDPDriverInfo] = _t(UDPDriverInfo * 10)
     nationality: int = _t(ctypes.c_int16)
     # REALTIME_CAR_UPDATE = 3
     driverIndex: int = _t(ctypes.c_int16)
@@ -318,8 +317,14 @@ class UDPBroadcastOutput(ctypes.Structure):
 
 
 # Function
-bytes_to_int = lambda bytes: int.from_bytes(bytes, "little")
-bytes_to_float = lambda bytes: struct.unpack("<f", bytes)[0]
+bytes_to_int = (
+    lambda func=int.from_bytes:  # assign func locally to reduce lookups (~30% faster)
+    lambda bytes: func(bytes, "little")
+)()
+bytes_to_float = (
+    lambda func=struct.unpack:
+    lambda bytes: func("<f", bytes)[0]
+)()
 
 
 def write_string(string: str, data: bytearray):
@@ -329,9 +334,9 @@ def write_string(string: str, data: bytearray):
     data.extend(bytestring)
 
 
-def read_string(stream: io.BytesIO, size: int) -> bytes:
+def read_string(stream_reader: Callable[[int], bytes], size: int) -> bytes:
     """Read string to data bytes"""
-    return stream.read(bytes_to_int(stream.read(size)))
+    return stream_reader(bytes_to_int(stream_reader(size)))
 
 
 # Set message
@@ -367,27 +372,27 @@ def set_message(message_type: int, connection_id: int) -> bytes:
 
 
 # Read stream
-def read_registration_result(stream: io.BytesIO, output: UDPRegistrationResult):
+def read_registration_result(stream_reader: Callable[[int], bytes], output: UDPRegistrationResult):
     """Read stream - registration result"""
-    output.connectionId = bytes_to_int(stream.read(4))  # Int32
-    output.connectionSuccess = bytes_to_int(stream.read(1)) > 0  # byte
-    output.isReadOnly = bytes_to_int(stream.read(1)) == 0  # byte
-    output.errorMessage = read_string(stream, 2)[:64]  # bytestring
+    output.connectionId = bytes_to_int(stream_reader(4))  # Int32
+    output.connectionSuccess = bytes_to_int(stream_reader(1)) > 0  # byte
+    output.isReadOnly = bytes_to_int(stream_reader(1)) == 0  # byte
+    output.errorMessage = read_string(stream_reader, 2)[:64]  # bytestring
 
 
-def read_lap_info(stream: io.BytesIO, output: UDPLapInfo):
+def read_lap_info(stream_reader: Callable[[int], bytes], output: UDPLapInfo):
     """Read stream - lap info"""
-    output.laptimeMS = bytes_to_int(stream.read(4))  # Int32
-    output.carIndex = bytes_to_int(stream.read(2))  # UInt16
-    output.driverIndex = bytes_to_int(stream.read(2))  # UInt16
-    output.splitCount = bytes_to_int(stream.read(1))  # byte
-    stream.seek(output.splitCount * 4, 1)  # skip lap history (save memory)
+    output.laptimeMS = bytes_to_int(stream_reader(4))  # Int32
+    output.carIndex = bytes_to_int(stream_reader(2))  # UInt16
+    output.driverIndex = bytes_to_int(stream_reader(2))  # UInt16
+    output.splitCount = bytes_to_int(stream_reader(1))  # byte
+    stream_reader(output.splitCount * 4)  # skip lap history (save memory)
     #for i in range(min(output.splitCount, 1000)):
-    #    output.splits[i] = bytes_to_int(stream.read(4))  # list Int32
-    output.isInvalid = bytes_to_int(stream.read(1)) > 0  # bool
-    output.isValidForBest = bytes_to_int(stream.read(1)) > 0  # bool
-    output.isOutlap = bytes_to_int(stream.read(1)) > 0  # bool
-    output.isInlap = bytes_to_int(stream.read(1)) > 0  # bool
+    #    output.splits[i] = bytes_to_int(stream_reader(4))  # list Int32
+    output.isInvalid = bytes_to_int(stream_reader(1)) > 0  # bool
+    output.isValidForBest = bytes_to_int(stream_reader(1)) > 0  # bool
+    output.isOutlap = bytes_to_int(stream_reader(1)) > 0  # bool
+    output.isInlap = bytes_to_int(stream_reader(1)) > 0  # bool
     if output.isOutlap:
         output.lapType = 1
     elif output.isInlap:
@@ -396,102 +401,112 @@ def read_lap_info(stream: io.BytesIO, output: UDPLapInfo):
         output.lapType = 2
 
 
-def read_realtime_update(stream: io.BytesIO, output: UDPSessionInfo):
+def read_realtime_update(stream_reader: Callable[[int], bytes], output: UDPSessionInfo):
     """Read stream - realtime update"""
-    output.eventIndex = bytes_to_int(stream.read(2))  # UInt16
-    output.sessionIndex = bytes_to_int(stream.read(2))  # UInt16
-    output.sessionType = bytes_to_int(stream.read(1))  # byte
-    output.sessionPhase = bytes_to_int(stream.read(1))  # byte
-    output.sessionTime = bytes_to_float(stream.read(4))  # float
-    output.sessionEndTime = bytes_to_float(stream.read(4))  # float
-    output.focusedCarIndex = bytes_to_int(stream.read(4))  # Int32
-    output.activeCameraSet = read_string(stream, 2)  # bytestring
-    output.activeCamera = read_string(stream, 2)  # bytestring
-    output.currentHudPage = read_string(stream, 2)  # bytestring
-    output.isReplayPlaying = bytes_to_int(stream.read(1)) > 0  # byte
+    output.eventIndex = bytes_to_int(stream_reader(2))  # UInt16
+    output.sessionIndex = bytes_to_int(stream_reader(2))  # UInt16
+    output.sessionType = bytes_to_int(stream_reader(1))  # byte
+    output.sessionPhase = bytes_to_int(stream_reader(1))  # byte
+    output.sessionTime = bytes_to_float(stream_reader(4))  # float
+    output.sessionEndTime = bytes_to_float(stream_reader(4))  # float
+    output.focusedCarIndex = bytes_to_int(stream_reader(4))  # Int32
+    output.activeCameraSet = read_string(stream_reader, 2)  # bytestring
+    output.activeCamera = read_string(stream_reader, 2)  # bytestring
+    output.currentHudPage = read_string(stream_reader, 2)  # bytestring
+    output.isReplayPlaying = bytes_to_int(stream_reader(1)) > 0  # byte
     if output.isReplayPlaying:
-        output.replaySessionTime = bytes_to_float(stream.read(4))  # float
-        output.replayRemainingTime = bytes_to_float(stream.read(4))  # float
-    output.timeOfDay = bytes_to_float(stream.read(4))  # float
-    output.ambientTemp = bytes_to_int(stream.read(1))  # byte
-    output.trackTemp = bytes_to_int(stream.read(1))  # byte
-    output.clouds = bytes_to_int(stream.read(1)) / 10.0  # byte to float
-    output.rainLevel = bytes_to_int(stream.read(1)) / 10.0  # byte to float
-    output.wetness = bytes_to_int(stream.read(1)) / 10.0  # byte to float
-    read_lap_info(stream, output.bestSessionLap)
+        output.replaySessionTime = bytes_to_float(stream_reader(4))  # float
+        output.replayRemainingTime = bytes_to_float(stream_reader(4))  # float
+    output.timeOfDay = bytes_to_float(stream_reader(4))  # float
+    output.ambientTemp = bytes_to_int(stream_reader(1))  # byte
+    output.trackTemp = bytes_to_int(stream_reader(1))  # byte
+    output.clouds = bytes_to_int(stream_reader(1)) / 10.0  # byte to float
+    output.rainLevel = bytes_to_int(stream_reader(1)) / 10.0  # byte to float
+    output.wetness = bytes_to_int(stream_reader(1)) / 10.0  # byte to float
+    read_lap_info(stream_reader, output.bestSessionLap)
 
 
 def read_realtime_car_update(
-    stream: io.BytesIO,
+    stream_reader: Callable[[int], bytes],
     output: UDPEntryList,
     max_vehicles: int = BroadcastingNetworkProtocol.MAX_MAPPED_VEHICLES,
 ):
     """Read stream - realtime car update"""
-    car_id = bytes_to_int(stream.read(2))  # UInt16
-    driver_index = bytes_to_int(stream.read(2))  # UInt16
-    driver_count = bytes_to_int(stream.read(1))  # byte
+    car_id = bytes_to_int(stream_reader(2))  # UInt16
+    driver_index = bytes_to_int(stream_reader(2))  # UInt16
+    driver_count = bytes_to_int(stream_reader(1))  # byte
     if car_id >= max_vehicles:
         return
     car_info = output.entryListCars[car_id]
-    # Check if entry list outdated
-    if car_info.entryIndex != car_id or car_info.driverCount != driver_count:
-        current_timestamp = perf_counter()
-        if current_timestamp - output.lastEntrylistRequest > 1:
-            output.lastEntrylistRequest = current_timestamp
-            output.syncEntryList = True
     # Update realtime car info
     car_info.carIndex = car_id
     car_info.driverIndex = driver_index
     car_info.driverCount = driver_count
-    car_info.gear = bytes_to_int(stream.read(1)) - 2  # byte
-    car_info.worldPosX = bytes_to_float(stream.read(4))  # float
-    car_info.worldPosY = bytes_to_float(stream.read(4))  # float
-    car_info.yaw = bytes_to_float(stream.read(4))  # float
-    car_info.carLocation = bytes_to_int(stream.read(1))  # byte
-    car_info.speedKmh = bytes_to_int(stream.read(2))  # UInt16
-    car_info.position = bytes_to_int(stream.read(2))  # UInt16
-    car_info.cupPosition = bytes_to_int(stream.read(2))  # UInt16
-    car_info.trackPosition = bytes_to_int(stream.read(2))  # UInt16
-    car_info.splinePosition = bytes_to_float(stream.read(4))  # float
-    car_info.completedLaps = bytes_to_int(stream.read(2))  # UInt16
-    car_info.deltaBest = bytes_to_int(stream.read(4))  # Int32
-    read_lap_info(stream, car_info.bestSessionLap)
-    read_lap_info(stream, car_info.lastLap)
-    read_lap_info(stream, car_info.currentLap)
+    car_info.gear = bytes_to_int(stream_reader(1)) - 2  # byte
+    car_info.worldPosX = bytes_to_float(stream_reader(4))  # float
+    car_info.worldPosY = bytes_to_float(stream_reader(4))  # float
+    car_info.yaw = bytes_to_float(stream_reader(4))  # float
+    car_info.carLocation = bytes_to_int(stream_reader(1))  # byte
+    car_info.speedKmh = bytes_to_int(stream_reader(2))  # UInt16
+    car_info.position = bytes_to_int(stream_reader(2))  # UInt16
+    car_info.cupPosition = bytes_to_int(stream_reader(2))  # UInt16
+    car_info.trackPosition = bytes_to_int(stream_reader(2))  # UInt16
+    car_info.splinePosition = bytes_to_float(stream_reader(4))  # float
+    car_info.completedLaps = bytes_to_int(stream_reader(2))  # UInt16
+    car_info.deltaBest = bytes_to_int(stream_reader(4))  # Int32
+    read_lap_info(stream_reader, car_info.bestSessionLap)
+    read_lap_info(stream_reader, car_info.lastLap)
+    read_lap_info(stream_reader, car_info.currentLap)
+    # Check if entry list outdated
+    if (
+        car_info.entryIndex != car_id
+        or car_info.driverCount != driver_count
+        # Driver index is only sync after the first lap (after out lap)
+        # Only send request at beginning of new lap
+        or (
+            car_info.currentDriverIndex != driver_index
+            and car_info.currentLap.laptimeMS < 1000  # < 1 second of new lap
+        )
+    ):
+        current_timestamp = perf_counter()
+        if current_timestamp - output.lastEntrylistRequest > 1:  # one second cooldown
+            output.lastEntrylistRequest = current_timestamp
+            output.syncEntryList = True
 
 
-def read_entry_list(stream: io.BytesIO, output: UDPEntryList):
+def read_entry_list(stream_reader: Callable[[int], bytes], output: UDPEntryList):
     """Read stream - entry list"""
-    output.connectionId = bytes_to_int(stream.read(4))  # Int32
-    output.carEntryCount = bytes_to_int(stream.read(2))  # UInt16
+    output.connectionId = bytes_to_int(stream_reader(4))  # Int32
+    output.carEntryCount = bytes_to_int(stream_reader(2))  # UInt16
 
 
 def read_entry_list_car(
-    stream: io.BytesIO,
+    stream_reader: Callable[[int], bytes],
     output: UDPEntryList,
     max_vehicles: int = BroadcastingNetworkProtocol.MAX_MAPPED_VEHICLES,
-    max_lineup: int = BroadcastingNetworkProtocol.MAX_LINE_UP,
 ):
     """Read stream - entry list car info"""
-    car_id = bytes_to_int(stream.read(2))  # UInt16
+    car_id = bytes_to_int(stream_reader(2))  # UInt16
     if car_id >= max_vehicles:
         return
     car_info = output.entryListCars[car_id]
     car_info.entryIndex = car_id
-    car_info.carModelType = bytes_to_int(stream.read(1))  # byte
-    car_info.teamName = read_string(stream, 2)  # bytestring
-    car_info.raceNumber = bytes_to_int(stream.read(4))  # Int32
-    car_info.cupCategory = bytes_to_int(stream.read(1))  # byte
-    car_info.currentDriverIndex = bytes_to_int(stream.read(1))  # byte
-    car_info.nationality = bytes_to_int(stream.read(2))  # UInt16
-    car_info.driverCount = bytes_to_int(stream.read(1))  # byte
-    for i in range(min(car_info.driverCount, max_lineup)):
-        first_name = read_string(stream, 2)  # bytestring
-        last_name = read_string(stream, 2)  # bytestring
-        short_name = read_string(stream, 2)  # bytestring
-        category = bytes_to_int(stream.read(1))  # byte
-        nationality = bytes_to_int(stream.read(2))  # UInt16
-        if car_info.driverIndex == i:
+    car_info.carModelType = bytes_to_int(stream_reader(1))  # byte
+    car_info.teamName = read_string(stream_reader, 2)  # bytestring
+    car_info.raceNumber = bytes_to_int(stream_reader(4))  # Int32
+    car_info.cupCategory = bytes_to_int(stream_reader(1))  # byte
+    car_info.currentDriverIndex = bytes_to_int(stream_reader(1))  # byte
+    car_info.nationality = bytes_to_int(stream_reader(2))  # UInt16
+    car_info.driverCount = bytes_to_int(stream_reader(1))  # byte
+    for index in range(car_info.driverCount):
+        first_name = read_string(stream_reader, 2)  # bytestring
+        if first_name == b'':  # detected EOL
+            return
+        last_name = read_string(stream_reader, 2)  # bytestring
+        short_name = read_string(stream_reader, 2)  # bytestring
+        category = bytes_to_int(stream_reader(1))  # byte
+        nationality = bytes_to_int(stream_reader(2))  # UInt16
+        if car_info.driverIndex == index:
             current_driver = car_info.currentDriverInfo
             current_driver.firstName = first_name
             current_driver.lastName = last_name
@@ -501,12 +516,12 @@ def read_entry_list_car(
             return
 
 
-def read_track_data(stream: io.BytesIO, output: UDPTrackData):
+def read_track_data(stream_reader: Callable[[int], bytes], output: UDPTrackData):
     """Read stream - track data"""
-    output.connectionId = bytes_to_int(stream.read(4))  # Int32
-    output.trackName = read_string(stream, 2)  # bytestring
-    output.trackId = bytes_to_int(stream.read(4))  # Int32
-    output.trackMeters = bytes_to_int(stream.read(4))  # Int32
+    output.connectionId = bytes_to_int(stream_reader(4))  # Int32
+    output.trackName = read_string(stream_reader, 2)  # bytestring
+    output.trackId = bytes_to_int(stream_reader(4))  # Int32
+    output.trackMeters = bytes_to_int(stream_reader(4))  # Int32
 
 
 # Parse data
@@ -515,20 +530,21 @@ def parse_udp_stream(response: bytes, output: UDPBroadcastOutput) -> int:
     if not response:
         return -1
     data_stream = io.BytesIO(response)
-    message_type = bytes_to_int(data_stream.read(1))
+    stream_reader = data_stream.read  # pass stream data reader to reduce lookups
+    message_type = bytes_to_int(stream_reader(1))
     # Ordered by most frequent accessed message type
     if message_type == 3:  # InboundMessageTypes.REALTIME_CAR_UPDATE
-        read_realtime_car_update(data_stream, output.entryList)
+        read_realtime_car_update(stream_reader, output.entryList)
     elif message_type == 2:  # InboundMessageTypes.REALTIME_UPDATE
-        read_realtime_update(data_stream, output.sessionInfo)
+        read_realtime_update(stream_reader, output.sessionInfo)
     elif message_type == 6:  # InboundMessageTypes.ENTRY_LIST_CAR
-        read_entry_list_car(data_stream, output.entryList)
+        read_entry_list_car(stream_reader, output.entryList)
     elif message_type == 4:  # InboundMessageTypes.ENTRY_LIST
-        read_entry_list(data_stream, output.entryList)
+        read_entry_list(stream_reader, output.entryList)
     elif message_type == 5:  # InboundMessageTypes.TRACK_DATA
-        read_track_data(data_stream, output.trackData)
+        read_track_data(stream_reader, output.trackData)
     elif message_type == 1:  # InboundMessageTypes.REGISTRATION_RESULT
-        read_registration_result(data_stream, output.registration)
+        read_registration_result(stream_reader, output.registration)
     data_stream.close()
     return message_type
 

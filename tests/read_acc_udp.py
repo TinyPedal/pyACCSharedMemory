@@ -55,7 +55,8 @@ def test_udp():
         last_car_entry_count = 0
         buffer_size = acc_udp.BroadcastingNetworkProtocol.BUFFER_SIZE
 
-        max_updates = 20
+        max_updates = 100
+        update_counter = 0
         while max_updates > 0:
             # Sync entry list
             if dataset.entryList.syncEntryList:
@@ -71,6 +72,9 @@ def test_udp():
                 print("Updated entry list:", car_entry_count)
             # Wait interval after 2=InboundMessageTypes.REALTIME_UPDATE
             if message_type == 2:
+                if update_counter > 0:
+                    break
+                update_counter += 1
                 sleep(update_interval)
             max_updates -= 1
 
@@ -78,11 +82,18 @@ def test_udp():
         print("track name:", dataset.trackData.trackName.decode())
         print("track length:", dataset.trackData.trackMeters)
         for i in range(car_entry_count):
-            car_type = dataset.entryList.entryListCars[i].carModelType
+            car_info = dataset.entryList.entryListCars[i]
+            car_type = car_info.carModelType
             car_model = acc_enum.ACC_CAR_MODEL_ID(car_type)
+            car_place = car_info.position
+            first_name = car_info.currentDriverInfo.firstName.decode()
+            last_name = car_info.currentDriverInfo.lastName.decode()
+            driver_name = f"{first_name} {last_name}"
             print(
-                "class:", acc_enum.ACC_CAR_CLASS(car_model),
-                "model:", acc_enum.ACC_CAR_MODEL(car_model),
+                "place:", f"{car_place:02}",
+                " driver:", f"{driver_name:<22}",
+                " class:", acc_enum.ACC_CAR_CLASS(car_model),
+                " model:", acc_enum.ACC_CAR_MODEL(car_model),
             )
 
 

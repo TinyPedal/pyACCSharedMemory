@@ -20,7 +20,6 @@ def test_udp():
 
     udp_host = "127.0.0.1"
     udp_port = 9000
-    server_address = (udp_host, udp_port)
     update_interval = 0.25
 
     dataset = acc_udp.UDPBroadcastOutput()
@@ -44,11 +43,12 @@ def test_udp():
         connection_timeout=1,
     ) as sock:
         connection_id = dataset.registration.connectionId
+        print("Client ID:", connection_id)
         # Enable entry list sync
         dataset.entryList.syncEntryList = True
         # Request track data, 11=outbound_type.REQUEST_TRACK_DATA
         message = acc_udp.set_message(11, connection_id)
-        sock.sendto(message, server_address)
+        sock.send(message)
         # Set entry list message, 10=outbound_type.REQUEST_ENTRY_LIST
         sync_entry_message = acc_udp.set_message(acc_udp.OutboundMessageTypes.REQUEST_ENTRY_LIST, connection_id)
         # Start update loop
@@ -60,11 +60,11 @@ def test_udp():
         while max_updates > 0:
             # Sync entry list
             if dataset.entryList.syncEntryList:
-                sock.sendto(sync_entry_message, server_address)
+                sock.send(sync_entry_message)
                 dataset.entryList.syncEntryList = False
                 dataset.entryList.lastEntrylistRequest = perf_counter()
             # Parse response data
-            message_type = acc_udp.parse_udp_stream(sock.recvfrom(buffer_size)[0], dataset)
+            message_type = acc_udp.parse_udp_stream(sock.recv(buffer_size), dataset)
             # Update for number of loops equal to carEntryCount, then wait for update_interval
             car_entry_count = dataset.entryList.carEntryCount
             if last_car_entry_count != car_entry_count:

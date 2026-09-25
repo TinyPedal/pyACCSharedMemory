@@ -355,6 +355,8 @@ def set_register_message(
         connection_password: connection password (optional) matches broadcasting.json 'connectionPassword' value; wrong password will result connection failure.
         command_password: command password (optional) matches broadcasting.json 'command_password' value; wrong password will grant read-only access.
         realtime_update_interval: UDP data realtime update interval (milliseconds).
+
+    Note: setting update interval lower than 200ms may cause further connection failure if client closed unexpectedly without unregister client ID first.
     """
     message = bytearray()
     message.extend(register_command_application.to_bytes(1, "little"))
@@ -368,7 +370,7 @@ def set_register_message(
 
 def set_message(message_type: int, connection_id: int) -> bytes:
     """Set message: message type, connection id"""
-    return struct.pack("<bi", message_type, connection_id)
+    return struct.pack("<bI", message_type, connection_id)
 
 
 # Read stream
@@ -573,14 +575,17 @@ def acc_udp_connect(
     server_address = (udp_host, udp_port)
     connection_id = -999
     sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-    sock.settimeout(connection_timeout)
     try:
+        # Connect to broadcasting server
+        sock.settimeout(connection_timeout)
+        sock.connect(server_address)
+
         # Send register message
         logger.info("UDP: REQUESTED: REGISTER_COMMAND_APPLICATION")
-        sock.sendto(connection_message, server_address)
+        sock.send(connection_message)
 
         # Get response
-        response, _ = sock.recvfrom(128)
+        response = sock.recv(128)
         parse_udp_stream(response, udp_output)
 
         # Update connection id
@@ -603,7 +608,8 @@ def acc_udp_connect(
         # Disconnect current client & close socket
         if connection_id != -999:
             logger.info("UDP: REQUESTED: UNREGISTER_COMMAND_APPLICATION")
-            sock.sendto(set_message(OutboundMessageTypes.UNREGISTER_COMMAND_APPLICATION, connection_id), server_address)
+            # Disconnect current client, 9=OutboundMessageTypes.UNREGISTER_COMMAND_APPLICATION
+            sock.send(set_message(9, connection_id))
             logger.info("UDP: DISCONNECTING: ACC Broadcasting Protocol (v%s)", BroadcastingNetworkProtocol.BROADCASTING_PROTOCOL_VERSION)
             logger.info("UDP: DISCONNECTED: CLIENT: #%s (%s:%s)", connection_id, udp_host, udp_port)
         sock.close()
@@ -631,8 +637,9 @@ def acc_udp_disconnect(
     server_address = (udp_host, udp_port)
     with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as sock:
         sock.settimeout(connection_timeout)
+        sock.connect(server_address)
         # Disconnect all clients, 9=OutboundMessageTypes.UNREGISTER_COMMAND_APPLICATION
         logger.info("UDP: REQUESTED: UNREGISTER_COMMAND_APPLICATION")
         for client_id in set(connection_id):
-            sock.sendto(set_message(9, client_id), server_address)
-            logger.info("UDP: PURGED CLIENT: #%s (%s:%s)", client_id, udp_host, udp_port)
+            sock.send(set_message(9, client_id))
+            logger.info("UDP: DISCONNECTING CLIENT: #%s (%s:%s)", client_id, udp_host, udp_port)

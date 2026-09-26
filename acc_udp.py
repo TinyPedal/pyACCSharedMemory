@@ -371,7 +371,8 @@ def set_register_message(
 
 def set_message(message_type: int, connection_id: int) -> bytes:
     """Set message: message type, connection id"""
-    return struct.pack("<bI", message_type, connection_id)
+    # Connection ID can be negative (ex. -1 returned by API), use signed int
+    return struct.pack("<bi", message_type, connection_id)
 
 
 # Read stream

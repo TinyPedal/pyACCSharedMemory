@@ -38,6 +38,7 @@ class OutboundMessageTypes:
 class InboundMessageTypes:
     """Inbound message types"""
 
+    NONE = -1
     REGISTRATION_RESULT = 1
     REALTIME_UPDATE = 2
     REALTIME_CAR_UPDATE = 3
@@ -528,26 +529,29 @@ def read_track_data(stream_reader: Callable[[int], bytes], output: UDPTrackData)
 
 # Parse data
 def parse_udp_stream(response: bytes, output: UDPBroadcastOutput) -> int:
-    """Parse ACC UDP data stream"""
+    """Parse ACC UDP data stream, return message type that matches InboundMessageTypes"""
+    message_type = -1
     if not response:
-        return -1
-    data_stream = io.BytesIO(response)
-    stream_reader = data_stream.read  # pass stream data reader to reduce lookups
-    message_type = bytes_to_int(stream_reader(1))
-    # Ordered by most frequent accessed message type
-    if message_type == 3:  # InboundMessageTypes.REALTIME_CAR_UPDATE
-        read_realtime_car_update(stream_reader, output.entryList)
-    elif message_type == 2:  # InboundMessageTypes.REALTIME_UPDATE
-        read_realtime_update(stream_reader, output.sessionInfo)
-    elif message_type == 6:  # InboundMessageTypes.ENTRY_LIST_CAR
-        read_entry_list_car(stream_reader, output.entryList)
-    elif message_type == 4:  # InboundMessageTypes.ENTRY_LIST
-        read_entry_list(stream_reader, output.entryList)
-    elif message_type == 5:  # InboundMessageTypes.TRACK_DATA
-        read_track_data(stream_reader, output.trackData)
-    elif message_type == 1:  # InboundMessageTypes.REGISTRATION_RESULT
-        read_registration_result(stream_reader, output.registration)
-    data_stream.close()
+        return message_type
+    with io.BytesIO(response) as data_stream:
+        stream_reader = data_stream.read  # pass stream data reader to reduce lookups
+        try:
+            message_type = bytes_to_int(stream_reader(1))
+            # Ordered by most frequent accessed message type
+            if message_type == 3:  # InboundMessageTypes.REALTIME_CAR_UPDATE
+                read_realtime_car_update(stream_reader, output.entryList)
+            elif message_type == 2:  # InboundMessageTypes.REALTIME_UPDATE
+                read_realtime_update(stream_reader, output.sessionInfo)
+            elif message_type == 6:  # InboundMessageTypes.ENTRY_LIST_CAR
+                read_entry_list_car(stream_reader, output.entryList)
+            elif message_type == 4:  # InboundMessageTypes.ENTRY_LIST
+                read_entry_list(stream_reader, output.entryList)
+            elif message_type == 5:  # InboundMessageTypes.TRACK_DATA
+                read_track_data(stream_reader, output.trackData)
+            elif message_type == 1:  # InboundMessageTypes.REGISTRATION_RESULT
+                read_registration_result(stream_reader, output.registration)
+        except (TypeError, struct.error):
+            pass
     return message_type
 
 

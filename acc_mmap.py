@@ -33,6 +33,7 @@ def linux_mmap(name: str, size: int) -> mmap.mmap:
     if file.tell() == 0:
         file.write(b"\0" * size)
         file.flush()
+        print(f"sharedmemory: Linux: created {name} in /dev/shm/")
     return mmap.mmap(file.fileno(), size)
 
 

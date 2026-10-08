@@ -15,6 +15,7 @@ from __future__ import annotations
 import ctypes
 import mmap
 import os
+import sys
 
 from ._common import _t, typedstruct
 
@@ -23,9 +24,12 @@ from ._common import _t, typedstruct
 class ACCConstants:
     """ACC constants"""
 
-    MM_PHYSICS_FILE_NAME = "Local\\acpmf_physics"
-    MM_GRAPHICS_FILE_NAME = "Local\\acpmf_graphics"
-    MM_STATIC_FILE_NAME = "Local\\acpmf_static"
+    # Windows: named file mapping in local namespace
+    # Linux: file in /dev/shm/, exposed by the Wine/Proton bridge (no "Local\\" prefix)
+    _MM_PREFIX: str = "Local\\" if sys.platform == "win32" else ""
+    MM_PHYSICS_FILE_NAME = f"{_MM_PREFIX}acpmf_physics"
+    MM_GRAPHICS_FILE_NAME = f"{_MM_PREFIX}acpmf_graphics"
+    MM_STATIC_FILE_NAME = f"{_MM_PREFIX}acpmf_static"
 
     MAX_MAPPED_VEHICLES: int = 60
     INVALID_CAR_INDEX: int = -1

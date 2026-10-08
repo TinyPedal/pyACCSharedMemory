@@ -113,8 +113,8 @@ class ACCPhysics(ctypes.Structure):
         tyreContactHeading: Tyre contact heading  [FL, FR, RL, RR] [x,y,z]
         brakeBias: Front brake bias, see Appendix 4
         localVelocity: Car velocity vector in local coordinates
-        P2PActivations: Not used in ACC
-        P2PStatus: Not used in ACC
+        pushToPassActivations: Not used in ACC
+        pushToPassStatus: Not used in ACC
         currentMaxRPM: Maximum engine rpm
         mz: Not shown in ACC
         fx: Not shown in ACC
@@ -202,8 +202,8 @@ class ACCPhysics(ctypes.Structure):
     tyreContactHeading: list[ACCVec3] = _t(ACCVec3 * 4)
     brakeBias: float = _t(ctypes.c_float)
     localVelocity: ACCVec3 = _t(ACCVec3)
-    P2PActivations: int = _t(ctypes.c_int)
-    P2PStatus: int = _t(ctypes.c_int)
+    pushToPassActivations: int = _t(ctypes.c_int)
+    pushToPassStatus: int = _t(ctypes.c_int)
     currentMaxRPM: int = _t(ctypes.c_int)
     mz: list[float] = _t(ctypes.c_float * 4)
     fx: list[float] = _t(ctypes.c_float * 4)
@@ -299,14 +299,14 @@ class ACCGraphics(ctypes.Structure):
         timeOfDay: Time of day in seconds
         directionLightsLeft: Is Blinker left on
         directionLightsRight: Is Blinker right on
-        GlobalYellow: Yellow Flag is out?
-        GlobalYellow1: Yellow Flag in Sector 1 is out?
-        GlobalYellow2: Yellow Flag in Sector 2 is out?
-        GlobalYellow3: Yellow Flag in Sector 3 is out?
-        GlobalWhite: White Flag is out?
-        GlobalGreen: Green Flag is out?
-        GlobalChequered: Checkered Flag is out?
-        GlobalRed: Red Flag is out?
+        globalYellow: Yellow Flag is out (any sectors)?
+        globalYellow1: Yellow Flag in Sector 1 is out?
+        globalYellow2: Yellow Flag in Sector 2 is out?
+        globalYellow3: Yellow Flag in Sector 3 is out?
+        globalWhite: White Flag is out?
+        globalGreen: Green Flag is out?
+        globalChequered: Checkered Flag is out?
+        globalRed: Red Flag is out?
         mfdTyreSet: Number of tyre set on the MFD
         mfdFuelToAdd: How much fuel to add on the MFD
         mfdTyrePressureLF: Tyre pressure left front on the MFD
@@ -390,14 +390,14 @@ class ACCGraphics(ctypes.Structure):
     timeOfDay: float = _t(ctypes.c_float)
     directionLightsLeft: int = _t(ctypes.c_int)
     directionLightsRight: int = _t(ctypes.c_int)
-    GlobalYellow: int = _t(ctypes.c_int)
-    GlobalYellow1: int = _t(ctypes.c_int)
-    GlobalYellow2: int = _t(ctypes.c_int)
-    GlobalYellow3: int = _t(ctypes.c_int)
-    GlobalWhite: int = _t(ctypes.c_int)
-    GlobalGreen: int = _t(ctypes.c_int)
-    GlobalChequered: int = _t(ctypes.c_int)
-    GlobalRed: int = _t(ctypes.c_int)
+    globalYellow: int = _t(ctypes.c_int)
+    globalYellow1: int = _t(ctypes.c_int)
+    globalYellow2: int = _t(ctypes.c_int)
+    globalYellow3: int = _t(ctypes.c_int)
+    globalWhite: int = _t(ctypes.c_int)
+    globalGreen: int = _t(ctypes.c_int)
+    globalChequered: int = _t(ctypes.c_int)
+    globalRed: int = _t(ctypes.c_int)
     mfdTyreSet: int = _t(ctypes.c_int)
     mfdFuelToAdd: float = _t(ctypes.c_float)
     mfdTyrePressureLF: float = _t(ctypes.c_float)
@@ -442,7 +442,7 @@ class ACCStatic(ctypes.Structure):
         aidFuelRate: Fuel consumption rate
         aidTireRate: Tyre wear rate
         aidMechanicalDamage: Mechanical damage rate
-        AllowTyreBlankets: Not allowed in Blancpain endurance series
+        allowTyreBlankets: Not allowed in Blancpain endurance series
         aidStability: Stability control used
         aidAutoClutch: Auto clutch used
         aidAutoBlip: Always true in ACC
@@ -459,8 +459,8 @@ class ACCStatic(ctypes.Structure):
         hasExtraLap: Not used in ACC
         carSkin: Not used in ACC
         reversedGridPositions: Not used in ACC
-        PitWindowStart: Pit window opening time (ms) since 0 second. Note, pit window is unavailable for the session if PitWindowStart greater than PitWindowEnd.
-        PitWindowEnd: Pit windows closing time (ms) since 0 second.
+        pitWindowStart: Pit window opening time (ms) since 0 second. Note, pit window is unavailable for the session if pitWindowStart greater than pitWindowEnd.
+        pitWindowEnd: Pit windows closing time (ms) since 0 second.
         isOnline: If is a multiplayer session
         dryTyresName: Name of the dry tyres
         wetTyresName: Name of the wet tyres
@@ -491,7 +491,7 @@ class ACCStatic(ctypes.Structure):
     aidFuelRate: float = _t(ctypes.c_float)
     aidTireRate: float = _t(ctypes.c_float)
     aidMechanicalDamage: float = _t(ctypes.c_float)
-    AllowTyreBlankets: int = _t(ctypes.c_int)
+    allowTyreBlankets: int = _t(ctypes.c_int)
     aidStability: float = _t(ctypes.c_float)
     aidAutoClutch: int = _t(ctypes.c_int)
     aidAutoBlip: int = _t(ctypes.c_int)
@@ -508,8 +508,8 @@ class ACCStatic(ctypes.Structure):
     hasExtraLap: int = _t(ctypes.c_int)
     carSkin: str = _t(ctypes.c_wchar * 33)
     reversedGridPositions: int = _t(ctypes.c_int)
-    PitWindowStart: int = _t(ctypes.c_int)
-    PitWindowEnd: int = _t(ctypes.c_int)
+    pitWindowStart: int = _t(ctypes.c_int)
+    pitWindowEnd: int = _t(ctypes.c_int)
     isOnline: int = _t(ctypes.c_int)
     dryTyresName: str = _t(ctypes.c_wchar * 33)
     wetTyresName: str = _t(ctypes.c_wchar * 33)

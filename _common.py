@@ -17,8 +17,7 @@ def _bytes_decode(key: str) -> property:
 
     def getter(self) -> str:
         # Shared memory data is UTF-16LE (Windows wchar_t), ends with null char
-        text = bytes(getattr(self, key)).decode("utf-16-le", errors="ignore")
-        return text.split("\x00", 1)[0]
+        return bytes(getattr(self, key)).decode("utf-16-le", errors="ignore").rstrip("\x00")
 
     return property(getter)
 

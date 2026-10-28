@@ -15,21 +15,28 @@ from .acc_data import ACCConstants
 logger = logging.getLogger(get_root_logger_name())
 
 
-def platform_mmap(name: str, size: int, prefix: str = "") -> mmap.mmap:
+def set_mmap_name(basename: str, prefix: str) -> str:
+    """Set mmap file name"""
+    if sys.platform == "win32":
+        prefix = "Local\\"
+    return f"{prefix}{basename}"
+
+
+def platform_mmap(name: str, size: int) -> mmap.mmap:
     """Platform memory mapping"""
     if sys.platform == "win32":
         return windows_mmap(name, size)
-    return linux_mmap(name, size, prefix)
+    return linux_mmap(name, size)
 
 
 def windows_mmap(name: str, size: int) -> mmap.mmap:
     """Windows mmap"""
-    return mmap.mmap(-1, size, f"Local\\{name}")
+    return mmap.mmap(-1, size, name)
 
 
-def linux_mmap(name: str, size: int, prefix: str) -> mmap.mmap | None:
+def linux_mmap(name: str, size: int) -> mmap.mmap | None:
     """Linux mmap - read data from '/dev/shm/filename' if available"""
-    with open(f"/dev/shm/{prefix}{name}", "a+b") as file:
+    with open(f"/dev/shm/{name}", "a+b") as file:
         stream_pos = file.tell()
         if stream_pos == 0:  # file is empty
             file.write(b"\0" * size)
@@ -47,6 +54,7 @@ class MMapControl:
     """Memory map control"""
 
     __slots__ = (
+        "_base_name",
         "_buffer",
         "_mmap_buffer",
         "_mmap_name",
@@ -63,6 +71,7 @@ class MMapControl:
             mmap_name: mmap filename.
             data_struct: ctypes data structure, ex. acc_data.SharedMemoryEvent.
         """
+        self._base_name = mmap_name
         self._buffer = bytearray()
         self._mmap_buffer = None
         self._mmap_name = mmap_name
@@ -81,12 +90,19 @@ class MMapControl:
             access_mode: 0 = copy access, 1 = direct access.
             mmap_prefix: mmap name prefix to be appended to base name; always point to 'Local\\' on windows.
         """
-        self._mmap_buffer = platform_mmap(
-            name=self._mmap_name,
-            size=ctypes.sizeof(self._struct),
+        # Set mmap name
+        self._mmap_name = set_mmap_name(
+            basename=self._base_name,
             prefix=mmap_prefix,
         )
 
+        # Create mmap instance
+        self._mmap_buffer = platform_mmap(
+            name=self._mmap_name,
+            size=ctypes.sizeof(self._struct),
+        )
+
+        # Create buffer
         if access_mode:
             self.data = self._struct.from_buffer(self._mmap_buffer)
             self.update = self.__buffer_share
@@ -94,11 +110,11 @@ class MMapControl:
             self._buffer[:] = self._mmap_buffer
             self._realtime = self._struct.from_buffer(self._mmap_buffer)
             self.data = self._struct.from_buffer(self._buffer)
-            if self._mmap_name == ACCConstants.MM_PHYSICS_FILE_NAME:
+            if self._base_name == ACCConstants.MM_PHYSICS_FILE_NAME:
                 self.update = self.__buffer_physics
-            elif self._mmap_name == ACCConstants.MM_GRAPHICS_FILE_NAME:
+            elif self._base_name == ACCConstants.MM_GRAPHICS_FILE_NAME:
                 self.update = self.__buffer_graphics
-            elif self._mmap_name == ACCConstants.MM_STATIC_FILE_NAME:
+            elif self._base_name == ACCConstants.MM_STATIC_FILE_NAME:
                 self.update = self.__buffer_static
             else:
                 self.update = self.__buffer_share

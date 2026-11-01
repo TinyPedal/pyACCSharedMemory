@@ -16,7 +16,7 @@ import ctypes
 import mmap
 import os
 
-from ._common import _t, typedstruct
+from ._common import _t, platform_mmap, set_mmap_name, typedstruct
 
 
 # Constants
@@ -24,7 +24,7 @@ class ACCConstants:
     """ACC constants
 
     Note, manually append 'Local\\' prefix to mmap file name on windows,
-    or use 'MMapControl' to set prefix.
+    or use 'set_mmap_name' to set prefix.
     """
 
     MM_PHYSICS_FILE_NAME = "acpmf_physics"
@@ -519,25 +519,22 @@ class ACCStatic(ctypes.Structure):
 class SimInfo:
     """Simulation info from shared memory"""
 
-    def __init__(self, mmap_prefix: str = "Local\\"):
-        self._acc_phys = mmap.mmap(
-            fileno=0,
-            length=ctypes.sizeof(ACCPhysics),
-            tagname=f"{mmap_prefix}{ACCConstants.MM_PHYSICS_FILE_NAME}",
+    def __init__(self, mmap_prefix: str = ""):
+        self._acc_phys = platform_mmap(
+            name=set_mmap_name(ACCConstants.MM_PHYSICS_FILE_NAME, mmap_prefix),
+            size=ctypes.sizeof(ACCPhysics),
         )
         self.ACCPhys = ACCPhysics.from_buffer(self._acc_phys)
 
-        self._acc_gfx = mmap.mmap(
-            fileno=0,
-            length=ctypes.sizeof(ACCGraphics),
-            tagname=f"{mmap_prefix}{ACCConstants.MM_GRAPHICS_FILE_NAME}",
+        self._acc_gfx = platform_mmap(
+            name=set_mmap_name(ACCConstants.MM_GRAPHICS_FILE_NAME, mmap_prefix),
+            size=ctypes.sizeof(ACCGraphics),
         )
         self.ACCGfx = ACCGraphics.from_buffer(self._acc_gfx)
 
-        self._acc_stat = mmap.mmap(
-            fileno=0,
-            length=ctypes.sizeof(ACCStatic),
-            tagname=f"{mmap_prefix}{ACCConstants.MM_STATIC_FILE_NAME}",
+        self._acc_stat = platform_mmap(
+            name=set_mmap_name(ACCConstants.MM_STATIC_FILE_NAME, mmap_prefix),
+            size=ctypes.sizeof(ACCStatic),
         )
         self.ACCStat = ACCStatic.from_buffer(self._acc_stat)
 

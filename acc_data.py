@@ -13,7 +13,6 @@ Type hints & annotation:
 from __future__ import annotations
 
 import ctypes
-import mmap
 import os
 
 from ._common import _t, platform_mmap, set_mmap_name, typedstruct
